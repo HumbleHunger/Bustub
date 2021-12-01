@@ -77,8 +77,10 @@ class IndexMetadata {
   std::string name_;
   std::string table_name_;
   // The mapping relation between key schema and tuple schema
+  // 索引key的集合？
   const std::vector<uint32_t> key_attrs_;
   // schema of the indexed key
+  // 索引key的模式
   Schema *key_schema_;
 };
 
