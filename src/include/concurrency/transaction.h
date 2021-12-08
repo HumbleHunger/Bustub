@@ -107,7 +107,8 @@ enum class AbortReason {
   UNLOCK_ON_SHRINKING,
   UPGRADE_CONFLICT,
   DEADLOCK,
-  LOCKSHARED_ON_READ_UNCOMMITTED
+  LOCKSHARED_ON_READ_UNCOMMITTED,
+  UPGRADE_ON_UNSHARED
 };
 
 /**
@@ -137,6 +138,8 @@ class TransactionAbortException : public std::exception {
         return "Transaction " + std::to_string(txn_id_) + " aborted on deadlock\n";
       case AbortReason::LOCKSHARED_ON_READ_UNCOMMITTED:
         return "Transaction " + std::to_string(txn_id_) + " aborted on lockshared on READ_UNCOMMITTED\n";
+      case AbortReason::UPGRADE_ON_UNSHARED:
+        return "Transaction " + std::to_string(txn_id_) + " aborted on lockupgrade on UPGRADE_ON_UNSHARED\n";
     }
     // Todo: Should fail with unreachable.
     return "";
@@ -248,6 +251,7 @@ class Transaction {
 
  private:
   /** The current transaction state. */
+  // 事务状态
   TransactionState state_;
   /** The isolation level of the transaction. */
   IsolationLevel isolation_level_;

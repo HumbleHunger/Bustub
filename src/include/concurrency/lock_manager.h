@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <set>
 
 #include "common/rid.h"
 #include "concurrency/transaction.h"
@@ -48,6 +49,8 @@ class LockManager {
     std::list<LockRequest> request_queue_;
     std::condition_variable cv_;  // for notifying blocked transactions on this rid
     bool upgrading_ = false;
+    bool writing_ = false;
+    int shared_count_ = 0;
   };
 
  public:
@@ -107,6 +110,8 @@ class LockManager {
    */
   bool Unlock(Transaction *txn, const RID &rid);
 
+  std::list<LockManager::LockRequest>::iterator GetFirstWaitRqt(const RID &rid);
+
   /*** Graph API ***/
   /**
    * Adds edge t1->t2
@@ -128,6 +133,12 @@ class LockManager {
   /** @return the set of all edges in the graph, used for testing only! */
   std::vector<std::pair<txn_id_t, txn_id_t>> GetEdgeList();
 
+  /** Abort a txn and delete all relative edges */
+  void DeleteNode(txn_id_t txn_id);
+
+  /** dfs function */
+  bool dfs(txn_id_t txn_id);
+
   /** Runs cycle detection in the background. */
   void RunCycleDetection();
 
@@ -137,9 +148,21 @@ class LockManager {
   std::thread *cycle_detection_thread_;
 
   /** Lock table for lock requests. */
+  // 锁表
   std::unordered_map<RID, LockRequestQueue> lock_table_;
   /** Waits-for graph representation. */
+  // 有向图
   std::unordered_map<txn_id_t, std::vector<txn_id_t>> waits_for_;
+
+  /** The nodes that is not included in a cycle */
+  std::set<txn_id_t> safe_set_;
+  /** all txns(nodes) */
+  std::set<txn_id_t> txn_set_;
+  /** all suspected txns in one dfs run */
+  std::unordered_set<txn_id_t> active_set_;
+  /** which Record a txn is waiting for, use to notify waiting txn */
+  // 记录某个txn wait在某个rid上
+  std::unordered_map<txn_id_t, RID> require_record_;
 };
 
 }  // namespace bustub
