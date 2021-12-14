@@ -137,16 +137,19 @@ void UpgradeTest() {
   CheckTxnLockSize(&txn, 1, 0);
   CheckGrowing(&txn);
 
+  std::cout << "test 1" << std::endl;
   res = lock_mgr.LockUpgrade(&txn, rid);
   EXPECT_TRUE(res);
   CheckTxnLockSize(&txn, 0, 1);
   CheckGrowing(&txn);
 
+  std::cout << "test 2" << std::endl;
   res = lock_mgr.Unlock(&txn, rid);
   EXPECT_TRUE(res);
   CheckTxnLockSize(&txn, 0, 0);
   CheckShrinking(&txn);
 
+  std::cout << "test 3" << std::endl;
   txn_mgr.Commit(&txn);
   CheckCommitted(&txn);
 }

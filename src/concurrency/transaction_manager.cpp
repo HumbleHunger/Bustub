@@ -31,6 +31,12 @@ Transaction *TransactionManager::Begin(Transaction *txn, IsolationLevel isolatio
   }
 
   txn_map[txn->GetTransactionId()] = txn;
+
+  if (enable_logging) {
+    LogRecord log(txn->GetTransactionId(), txn->GetPrevLSN(), LogRecordType::BEGIN);
+    txn->SetPrevLSN(log_manager_->AppendLogRecord(&log));
+  }
+
   return txn;
 }
 
@@ -49,6 +55,19 @@ void TransactionManager::Commit(Transaction *txn) {
     write_set->pop_back();
   }
   write_set->clear();
+
+  if (enable_logging) {
+    LogRecord log(txn->GetTransactionId(), txn->GetPrevLSN(), LogRecordType::COMMIT);
+    txn->SetPrevLSN(log_manager_->AppendLogRecord(&log));
+
+    // make sure log persist, pre lsn is the last one
+    // 自旋等待commit日志刷入磁盘，因为根据ARIES要求只有当日志写入到磁盘，事务才算结束
+    while (txn->GetPrevLSN() > log_manager_->GetPersistentLSN()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      //LOG_DEBUG("Commit(): spin....\n");
+    }
+    //LOG_DEBUG("txn %d: Commit....", txn->GetTransactionId());
+  }
 
   // Release all the locks.
   ReleaseLocks(txn);
@@ -99,6 +118,18 @@ void TransactionManager::Abort(Transaction *txn) {
   }
   table_write_set->clear();
   index_write_set->clear();
+
+  if (enable_logging) {
+    LogRecord log(txn->GetTransactionId(), txn->GetPrevLSN(), LogRecordType::ABORT);
+    txn->SetPrevLSN(log_manager_->AppendLogRecord(&log));
+
+    // make sure log persist, pre lsn is the last one
+    while (txn->GetPrevLSN() > log_manager_->GetPersistentLSN()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      //LOG_DEBUG("Abort(): spin....\n");
+    }
+    //LOG_DEBUG("txn %d: Abort....", txn->GetTransactionId());
+  }
 
   // Release all the locks.
   ReleaseLocks(txn);

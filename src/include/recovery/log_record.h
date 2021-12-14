@@ -38,9 +38,11 @@ enum class LogRecordType {
  * For every write operation on the table page, you should write ahead a corresponding log record.
  *
  * For EACH log record, HEADER is like (5 fields in common, 20 bytes in total).
+ * Hander信息的格式
  *---------------------------------------------
  * | size | LSN | transID | prevLSN | LogType |
  *---------------------------------------------
+ * 几种log类型的格式
  * For insert type log record
  *---------------------------------------------------------------
  * | HEADER | tuple_rid | tuple_size | tuple_data(char[] array) |

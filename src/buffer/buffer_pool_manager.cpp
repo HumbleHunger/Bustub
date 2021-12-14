@@ -60,6 +60,14 @@ bool BufferPoolManager::FindFreePage(frame_id_t *frame_id) {
       //std::cout  << "LRU淘汰掉frame " <<*frame_id<< "pageid 为 "<< replace_page_id << std::endl;
       // 如果page是dirty，则需要刷入disk
       if (replace_page->is_dirty_) {
+        // 如果恢复日志开启
+        if (enable_logging) {
+          // 使用while对条件进出判断，保证持久化日志的lsn大于此块的最后更新日志lsn，即保证WAL
+          while (replace_page->GetLSN() > log_manager_->GetPersistentLSN()) {
+            std::promise<void> promise;
+            log_manager_->WakeupFlushThread(&promise);
+          }
+        }
         char *data = replace_page->data_;
         disk_manager_->WritePage(replace_page_id, data);
       }
@@ -150,14 +158,24 @@ bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
 
 bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
   // Make sure you call DiskManager::WritePage!
-  latch_.lock();
+  // 没有对page本身加锁，在刷新的过程中可能会有新数据写入
+  std::lock_guard<std::mutex> lock(latch_);
   if (!page_table_.count(page_id)) {
-    latch_.unlock();
     return false;
   }
 
-  disk_manager_->WritePage(page_id, pages_[page_table_[page_id]].data_);
-  latch_.unlock();
+  Page *page = &pages_[page_table_[page_id]];
+
+  // 如果恢复日志开启
+  if (enable_logging) {
+    // 使用while对条件进出判断，保证持久化日志的lsn大于此块的最后更新日志lsn，即保证WAL
+    while (page->GetLSN() > log_manager_->GetPersistentLSN()) {
+      std::promise<void> promise;
+      log_manager_->WakeupFlushThread(&promise);
+    }
+  }
+
+  disk_manager_->WritePage(page_id, page->data_);
   return true;
 }
 
@@ -169,7 +187,7 @@ Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
   // 4.   Set the page ID output parameter. Return a pointer to P.
   //std::cout << "NewPgImp" << std::endl;
   latch_.lock();
-  Page* page = NULL;
+  Page* page = nullptr;
   page_id_t new_page_id = disk_manager_->AllocatePage();
 
   frame_id_t frame_id;
@@ -216,6 +234,14 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
   }
 
   if (page->is_dirty_) {
+      // 如果恢复日志开启
+      if (enable_logging) {
+        // 使用while对条件进出判断，保证持久化日志的lsn大于此块的最后更新日志lsn，即保证WAL
+        while (page->GetLSN() > log_manager_->GetPersistentLSN()) {
+          std::promise<void> promise;
+          log_manager_->WakeupFlushThread(&promise);
+        }
+      }
     disk_manager_->WritePage(page_id, page->data_);
   }
   

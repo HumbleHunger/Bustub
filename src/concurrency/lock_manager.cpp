@@ -318,9 +318,6 @@ std::vector<std::pair<txn_id_t, txn_id_t>> LockManager::GetEdgeList() {
   return result;
 }
 
-// Dyy : In the handout they say 'throw a exception', but throw a exception
-//       out a thread will crash the whole process! So I don't throw exception
-//       in this function, but in Lock function
 void LockManager::RunCycleDetection() {
   while (enable_cycle_detection_) {
     std::this_thread::sleep_for(cycle_detection_interval);
