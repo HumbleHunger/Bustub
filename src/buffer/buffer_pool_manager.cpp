@@ -158,14 +158,14 @@ bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
 
 bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
   // Make sure you call DiskManager::WritePage!
-  // 没有对page本身加锁，在刷新的过程中可能会有新数据写入
+  // 没有对page本身加锁，在刷新的过程中可能会有新数据写入 done
   std::lock_guard<std::mutex> lock(latch_);
   if (!page_table_.count(page_id)) {
     return false;
   }
 
   Page *page = &pages_[page_table_[page_id]];
-
+  page->WLatch();
   // 如果恢复日志开启
   if (enable_logging) {
     // 使用while对条件进出判断，保证持久化日志的lsn大于此块的最后更新日志lsn，即保证WAL
@@ -176,6 +176,7 @@ bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
   }
 
   disk_manager_->WritePage(page_id, page->data_);
+  page->WUnlatch();
   return true;
 }
 
@@ -234,6 +235,7 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
   }
 
   if (page->is_dirty_) {
+      page->WLatch();
       // 如果恢复日志开启
       if (enable_logging) {
         // 使用while对条件进出判断，保证持久化日志的lsn大于此块的最后更新日志lsn，即保证WAL
@@ -243,6 +245,7 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
         }
       }
     disk_manager_->WritePage(page_id, page->data_);
+    page->WUnlatch();
   }
   
   disk_manager_->DeallocatePage(page_id);

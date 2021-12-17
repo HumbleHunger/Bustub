@@ -139,6 +139,7 @@ void LogRecovery::Redo() {
           // log is newer than disk page?
           // 如果log比page上记录的pagelsn大，则需要redo，否则不需要，因为更新的数据已经存入disk。该操作减少了恢复时间
           if (log.GetLSN() > page->GetLSN()) {
+            // 当redo或者undo期间时，需要对缓冲区page加锁保证期间page不往disk上输出，因为这会导致部分更新状态，而物理逻辑redo操作不能重做，因为不是幂等性
             page->WLatch();
             auto res = page->InsertTuple(log.GetInsertTuple(), &rid, nullptr, nullptr, nullptr);
             assert(res);
